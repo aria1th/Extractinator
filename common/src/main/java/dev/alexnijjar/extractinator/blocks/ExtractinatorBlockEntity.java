@@ -17,11 +17,13 @@ import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.state.BlockState;
 
+import java.util.ArrayList;
 import java.util.List;
 
 public class ExtractinatorBlockEntity extends BlockEntity implements ExtractinatorContainer {
     private final NonNullList<ItemStack> inventory;
     protected int remainingUsages;
+	private final List<ItemStack> failedInputs = new ArrayList<>(32);
 
     public ExtractinatorBlockEntity(BlockPos blockPos, BlockState blockState) {
         super(ModBlockEntities.EXTRACTINATOR.get(), blockPos, blockState);
@@ -38,9 +40,9 @@ public class ExtractinatorBlockEntity extends BlockEntity implements Extractinat
 
     protected void extractinate() {
         if (this.level != null) {
-            dispenseItems();
             placeBlockAbove();
             extractBlockAbove();
+	        dispenseItems();
             setChanged();
         }
     }
@@ -55,9 +57,9 @@ public class ExtractinatorBlockEntity extends BlockEntity implements Extractinat
             } else {
                 level.playSound(null, this.getBlockPos(), SoundEvents.GRAVEL_BREAK, SoundSource.BLOCKS, 1.0f, 1.0f);
                 List<ItemStack> outputs = ModUtils.extractItem(this.getBlockLevel(), input);
-                if (!outputs.isEmpty()) {
-                    outputs.forEach(this::addItem);
-                }
+	            if (!outputs.isEmpty()) {
+		            outputs.stream().map(this::addItem).filter(a -> !a.isEmpty()).forEach(failedInputs::add);
+	            }
             }
             getItem(0).shrink(1);
         }
@@ -71,24 +73,24 @@ public class ExtractinatorBlockEntity extends BlockEntity implements Extractinat
             this.getBlockLevel().destroyBlock(this.getBlockPos().above(), false);
             List<ItemStack> outputs = ModUtils.extractItem(this.getBlockLevel(), stack);
             damage();
-            if (!outputs.isEmpty()) {
-                outputs.forEach(this::addItem);
-            }
+	        if (!outputs.isEmpty()) {
+		        outputs.stream().map(this::addItem).filter(a -> !a.isEmpty()).forEach(failedInputs::add);
+	        }
         }
     }
 
     protected void dispenseItems() {
-        for (int i = 1; i < getInventory().size(); i++) {
-            ItemStack stack = this.getItem(i);
-            if (stack.isEmpty()) continue;
-            if (!getBlockLevel().getBlockState(getBlockPos().above()).isAir()) continue;
-            BlockPos pos = this.getBlockPos();
-            ItemEntity itemEntity = new ItemEntity(level, pos.getX() + 0.5f, pos.getY() + 2.0f, pos.getZ() + 0.5f, stack.copy());
-            itemEntity.setDeltaMovement(itemEntity.getDeltaMovement().scale(1.5f));
-            stack.setCount(0);
-            level.addFreshEntity(itemEntity);
-            break;
-        }
+	    for (ItemStack stack : failedInputs) {
+		    if (stack.isEmpty()) continue;
+		    if (!getBlockLevel().getBlockState(getBlockPos().above()).isAir()) continue;
+		    BlockPos pos = this.getBlockPos();
+		    ItemEntity itemEntity = new ItemEntity(level, pos.getX() + 0.5f, pos.getY() + 2.0f, pos.getZ() + 0.5f, stack.copy());
+		    itemEntity.setDeltaMovement(itemEntity.getDeltaMovement().scale(1.5f));
+		    stack.setCount(0);
+		    level.addFreshEntity(itemEntity);
+		    break;
+	    }
+		failedInputs.clear();
     }
 
     public void damage() {
